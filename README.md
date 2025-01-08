@@ -1,7 +1,9 @@
 # Elysium Journey
 A Platform for High Net Worth Individuals for booking acoomodations, flights and other experiences suited for the luxury travel.
 
-Emphesizing privacy protection and data integrity and using ZKSync blockchain technology.
+Emphasizing privacy protection and data integrity and using ZKSync blockchain technology.
+
+
 
 ## ZKsync Hardhat project template
 
