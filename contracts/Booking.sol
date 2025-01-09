@@ -26,7 +26,7 @@ contract BookingContract is ProviderRegistry {
         string resourceId;
         uint256 amount;
         BookingStatus status;
-        string additionalData;
+        bytes additionalData;
         uint256 createdAt;
         uint256 updatedAt;
     }
@@ -35,7 +35,7 @@ contract BookingContract is ProviderRegistry {
     mapping(uint256 => Booking) public bookings;
 
     event BookingCreated(uint256 indexed id, string indexed userId, 
-                         string indexed resourceId, uint256 amount, string bookingData);
+                         string indexed resourceId, uint256 amount, bytes bookingData);
     event BookingCancelled(uint256 indexed id, string indexed userId, address userAddress);
     event BookingDisputed(uint256 indexed id, string indexed user, string indexed resourceId);
     event BookingResolved(uint256 indexed id, address indexed resolver);
@@ -54,9 +54,13 @@ contract BookingContract is ProviderRegistry {
         external payable onlyOwner() onlyApprovedProvider(providerCode) returns (uint256) {
         console.log("###### Provider to create booking: ", providerCode);
         console.log("###### Approved provider? ", approvedProviders[providerCode]);
-        require(msg.value > 0, "Amount must be greater than zero");
+        
+        // Used when user sends funds, web3 flow
+        // require(msg.value > 0, "Amount must be greater than zero");
 
-        (string memory additionalInfo) = abi.decode(additionalData, (string));
+        (uint256 bookingAmount) = abi.decode(additionalData, (uint256));
+        // console.log("###### Additional data: ", additionalInfo);
+        console.log("###### Booking amount: ", bookingAmount);
 
         bookingCounter++;
         bookings[bookingCounter] = Booking({
@@ -64,25 +68,16 @@ contract BookingContract is ProviderRegistry {
             userId: userId,
             providerCode: providerCode,
             resourceId: resourceId,
-            amount: msg.value,
+            // amount: msg.value, // Used for web3 flow that users sends funds
+            amount: bookingAmount,
             status: BookingStatus.Pending,
-            additionalData: additionalInfo,
+            additionalData: additionalData,
             createdAt: block.timestamp,
             updatedAt: block.timestamp
         });
 
-        string memory bookingData = string(
-            abi.encodePacked(additionalData)
-            //     '{"id": "', bookingId.toString(), 
-            //     '", "userAddress": "', Strings.toHexString(uint160(msg.sender), 20), 
-            //     '", "providerCode": "', Strings.toHexString(uint160(provider), 20), 
-            //     '", "amount": "', amount.toString(), 
-            //     '", "createdAt": "', block.timestamp.toString(),
-            //     '"}'
-            // )
-        );
         console.log("###### Booking created: ", bookingCounter);
-        emit BookingCreated(bookingCounter, userId, resourceId, msg.value, additionalInfo);
+        emit BookingCreated(bookingCounter, userId, resourceId, bookingAmount /*msg.value*/, additionalData);
         
         return bookingCounter;
     }

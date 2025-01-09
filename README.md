@@ -4,7 +4,6 @@ A Platform for High Net Worth Individuals for booking acoomodations, flights and
 Emphasizing privacy protection and data integrity and using ZKSync blockchain technology.
 
 
-
 ## ZKsync Hardhat project template
 
 This project was scaffolded with [zksync-cli](https://github.com/matter-labs/zksync-cli).

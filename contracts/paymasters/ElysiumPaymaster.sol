@@ -3,18 +3,32 @@ pragma solidity ^0.8.20;
 
 import { IPaymaster, ExecutionResult } from "@matterlabs/zksync-contracts/l2/system-contracts/interfaces/IPaymaster.sol";
 import { IPaymasterFlow } from "@matterlabs/zksync-contracts/l2/system-contracts/interfaces/IPaymasterFlow.sol";
-import { Transaction } from "@matterlabs/zksync-contracts/l2/system-contracts/libraries/TransactionHelper.sol";
+import { Transaction, TransactionHelper } from "@matterlabs/zksync-contracts/l2/system-contracts/libraries/TransactionHelper.sol";
+import { BOOTLOADER_FORMAL_ADDRESS } from "@matterlabs/zksync-contracts/l2/system-contracts/Constants.sol";
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 
+import "hardhat/console.sol";
+
+interface IBookingContract {
+    function isValidUserId(string memory userId) external view returns (bool);
+}
+
 contract ElysiumPaymaster is IPaymaster, Ownable {
-    address BOOTLOADER_FORMAL_ADDRESS = address(0);
-    bytes4 constant PAYMASTER_VALIDATION_SUCCESS_MAGIC = IPaymaster.validateAndPayForPaymasterTransaction.selector;
-    constructor(address _owner) Ownable(_owner) {}
+    address bookingContractAddress;
+    bytes4 constant PAYMASTER_VALIDATION_SUCCESS_MAGIC = 
+        IPaymaster.validateAndPayForPaymasterTransaction.selector;
+    
+    event TransactionValidated(string indexed userId, uint256 requiredETH);
+    event FundsWithdrawn(address _to, uint256 balance);
+    
+    constructor(address _bookingContractAddress) Ownable(msg.sender) {
+        bookingContractAddress = _bookingContractAddress;
+    }
 
     modifier onlyBootloader() {
         require(
-            msg.sender == address(0),
+            msg.sender == BOOTLOADER_FORMAL_ADDRESS,
             "Only bootloader can call this method"
         );
         // Continue execution if called from the bootloader.
@@ -25,12 +39,7 @@ contract ElysiumPaymaster is IPaymaster, Ownable {
         bytes32,
         bytes32,
         Transaction calldata _transaction
-    )
-        external
-        payable
-        onlyBootloader
-        returns (bytes4 magic, bytes memory context)
-    {
+    ) external payable onlyBootloader returns (bytes4 magic, bytes memory context) {
         // By default we consider the transaction as accepted.
         magic = PAYMASTER_VALIDATION_SUCCESS_MAGIC;
         require(
@@ -42,19 +51,39 @@ contract ElysiumPaymaster is IPaymaster, Ownable {
             _transaction.paymasterInput[0:4]
         );
         if (paymasterInputSelector == IPaymasterFlow.general.selector) {
-            // Note, that while the minimal amount of ETH needed is tx.gasPrice * tx.gasLimit,
+            
+            // Validations
+            require(
+                address(uint160(_transaction.to)) == bookingContractAddress,
+                "Paymaster can only be used for the Booking Contract"
+            );
+
+            // Check if `userId` is valid
+            string memory userId = abi.decode(_transaction.data[4:], (string));
+            IBookingContract bookingContract = IBookingContract(bookingContractAddress);
+            require(bookingContract.isValidUserId(userId), "Invalid or unknown userId");
+
+            // Extract transaction function call
+            bytes4 functionSelector = bytes4(_transaction.data[0:4]);
+            
+            // Expected selector for createBooking
+            bytes4 expectedSelector = bytes4(keccak256("createBooking(string,string,string,bytes)"));
+            require(functionSelector == expectedSelector, "Function not approved by Paymaster");
+
+            
+            // The minimal amount of ETH needed is tx.gasPrice * tx.gasLimit,
             // neither paymaster nor account are allowed to access this context variable.
             uint256 requiredETH = _transaction.gasLimit *
                 _transaction.maxFeePerGas;
-
-            // The bootloader never returns any data, so it can safely be ignored here.
-            (bool success, ) = payable(BOOTLOADER_FORMAL_ADDRESS).call{
-                value: requiredETH
-            }("");
+            
+            bool success = TransactionHelper.payToTheBootloader(_transaction);
             require(
                 success,
                 "Failed to transfer tx fee to the Bootloader. Paymaster balance might not be enough."
             );
+            
+            console.log("Transaction validated for userId: ", userId);
+            emit TransactionValidated(userId, requiredETH);
         } else {
             revert("Unsupported paymaster flow in paymasterParams.");
         }
@@ -73,6 +102,11 @@ contract ElysiumPaymaster is IPaymaster, Ownable {
         uint256 balance = address(this).balance;
         (bool success, ) = _to.call{value: balance}("");
         require(success, "Failed to withdraw funds from paymaster.");
+        emit FundsWithdrawn(_to, balance);
+    }
+
+    function getBalance() external view returns (uint256) {
+        return address(this).balance;
     }
 
     receive() external payable {}

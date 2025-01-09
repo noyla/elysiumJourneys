@@ -6,6 +6,7 @@ import "hardhat/console.sol";
 
 contract ProviderRegistry is Ownable {
     mapping(string => bool) public approvedProviders;
+    mapping(string => bool) public approvedUserIds;
 
     event ProviderApproved(string providerCode, bool approved);
 
@@ -29,14 +30,15 @@ contract ProviderRegistry is Ownable {
         approvedProviders[providerCode] = false;
     }
 
-    function normalizeString(string memory input) internal pure returns (string memory) {
-        bytes memory temp = bytes(input);
-        for (uint256 i = 0; i < temp.length; i++) {
-            // Convert uppercase letters to lowercase (ASCII range)
-            if (temp[i] >= 0x41 && temp[i] <= 0x5A) {
-                temp[i] = bytes1(uint8(temp[i]) + 32);
-            }
-        }
-        return string(temp);
+    function addUserId(string memory userId) external onlyOwner {
+        approvedUserIds[userId] = true;
+    }
+
+    function removeUserId(string memory userId) external onlyOwner {
+        approvedUserIds[userId] = false;
+    }
+    
+    function isValidUserId(string memory userId) external view returns (bool) {
+        return approvedUserIds[userId];
     }
 }
