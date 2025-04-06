@@ -70,6 +70,12 @@ contract ElysiumPaymaster is IPaymaster, Ownable {
             bytes4 expectedSelector = bytes4(keccak256("createBooking(string,string,string,bytes)"));
             require(functionSelector == expectedSelector, "Function not approved by Paymaster");
 
+            // Extract the zk proof hash (assumed to follow the selector)
+            // bytes32 providedProofHash;
+            // assembly {
+            //     providedProofHash := calldataload(add(_transaction.paymasterInput.offset, 4))
+            // }
+            // require(providedProofHash == allowedProofHash, "Invalid ZK proof hash");
             
             // The minimal amount of ETH needed is tx.gasPrice * tx.gasLimit,
             // neither paymaster nor account are allowed to access this context variable.
