@@ -1,10 +1,14 @@
 import { utils, Contract } from "zksync-ethers";
 import { ethers } from "ethers";
 import { DeployedContracts, deployedContracts } from "../contracts";
+import { BookingRecord } from "./bookingRecord";
 import dotenv from "dotenv";
 import { adminWallet } from "../user";
+import { v4 as uuidv4 } from 'uuid';
+
 
 dotenv.config();
+
 
 export class BookingManager {
     private bookingContract: Contract;
@@ -20,24 +24,27 @@ export class BookingManager {
      * Function to create a booking transaction on zkSync
      */
     public async createBooking(
-        userId: string,
-        authorizedProviderCode: string,
-        resourceId: string,
-        bookingAmount: number
-    ): Promise<{ transactionHash: string }> {
+        bookingRecord: BookingRecord,
+    ): Promise<BookingRecord> {
         try {
-            if (!userId || !authorizedProviderCode || !resourceId || !bookingAmount) {
+            if (!bookingRecord.userId || !bookingRecord.authorizedProviderCode || 
+                !bookingRecord.resourceId || !bookingRecord.bookingAmount) {
                 throw new Error("Missing required parameters.");
             }
 
-            const amountInWei = ethers.parseEther(bookingAmount.toString());
-            const encodedAdditionalData = ethers.AbiCoder.defaultAbiCoder().encode(["uint256"], [amountInWei]);
+            const bookingId = "0x" + uuidv4().replace(/-/g, "");
+            console.log("%%%%%%%% Booking ID:", bookingId);
+            console.log("%%%%%%%% Booking amount:", bookingRecord.bookingAmount);
+            // const amountInWei = bookingRecord.bookingAmount.toString();
+            const encodedAdditionalData = ethers.AbiCoder.defaultAbiCoder().encode(
+                ["uint256"], 
+                [bookingRecord.bookingAmount]);
             
             const paymasterAddress = await this.paymasterContract.getAddress();
             const paymasterBalance = await adminWallet.provider.getBalance(paymasterAddress);
             console.log("###### Paymaster ETH Balance:", ethers.formatEther(paymasterBalance.toString()));
 
-            if (parseFloat(ethers.formatEther(paymasterBalance.toString())) < bookingAmount) {
+            if (parseFloat(ethers.formatEther(paymasterBalance.toString())) < bookingRecord.bookingAmount) {
                 console.log("###### Paymaster ETH Balance is less than booking amount. Reverting transaction.");
             }
 
@@ -50,23 +57,22 @@ export class BookingManager {
 
             // Estimate gas for the transaction
             const gasLimit = await this.bookingContract.createBooking.estimateGas(
-                userId,
-                authorizedProviderCode,
-                resourceId,
+                bookingRecord.userId,
+                bookingRecord.authorizedProviderCode,
+                bookingRecord.resourceId,
+                bookingId,
                 encodedAdditionalData,
                 {
                     customData: paymasterParams,
                 }
             );
-
-            console.log("###### Estimated gas", gasLimit);
-            console.log("###### TEST #######");
             
             // Prepare the transaction data
             const txData = await this.bookingContract.createBooking.populateTransaction(
-                userId,
-                authorizedProviderCode,
-                resourceId,
+                bookingRecord.userId,
+                bookingRecord.authorizedProviderCode,
+                bookingRecord.resourceId,
+                bookingId,
                 encodedAdditionalData
             );
 
@@ -79,18 +85,9 @@ export class BookingManager {
                 customData: paymasterParams,
             });
 
-            // const tx = await bookingContract.createBooking(userId, authorizedProviderCode, resourceId, amountInWei, {
-            //     customData: {
-            //         paymasterParams: utils.getPaymasterParams(process.env.PAYMASTER_ADDRESS || "", {
-            //             type: "General",
-            //             innerInput: new Uint8Array(),
-            //         }),
-            //     },
-            // });
-
-            // await tx.wait();
-
-            return { transactionHash: tx.hash };
+            bookingRecord.transactionHash = tx.hash;
+            bookingRecord.bookingId = bookingId;
+            return bookingRecord;
         } catch (error) {
             console.error(error);
             if (error instanceof Error) {
@@ -99,5 +96,20 @@ export class BookingManager {
                 throw new Error("Failed to create booking.");
             }
         }
+    }
+
+    public async getBooking(bookingId: string): Promise<BookingRecord> {
+        console.log("###### Booking ID:", bookingId);
+        const booking = await this.bookingContract.bookings.staticCall(bookingId);
+        console.log("@@@@@@@@ booking: ", booking);
+        const bookingRecord = new BookingRecord();
+        bookingRecord.userId = booking.userId;
+        bookingRecord.bookingId = booking.id;
+        bookingRecord.status = booking.status;
+        bookingRecord.authorizedProviderCode = booking.providerCode;
+        bookingRecord.resourceId = booking.resourceId;
+        bookingRecord.bookingAmount = booking.amount;
+        bookingRecord.transactionHash = booking.transactionHash;
+        return bookingRecord;
     }
 }

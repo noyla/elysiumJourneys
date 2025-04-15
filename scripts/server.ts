@@ -4,6 +4,8 @@ import { ethers } from "ethers";
 import dotenv from "dotenv";
 import { getWallet, LOCAL_RICH_WALLETS } from "../deploy/utils";
 import { BookingManager } from "../server/booking/booking";
+import { BookingRecord } from "../server/booking/bookingRecord";
+import { v4 as uuidv4 } from 'uuid';
 
 dotenv.config();
 
@@ -20,7 +22,7 @@ const wallet = getWallet(LOCAL_RICH_WALLETS[0].privateKey);
 
 const bookingContractAddress = process.env.BOOKING_CONTRACT_ADDRESS || "";
 const bookingContractAbi = [
-    "function createBooking(string userId, string authorizedProviderCode, string resourceId, uint256 bookingAmount) external payable"
+    "function createBooking(string userId, string authorizedProviderCode, string resourceId, bytes16 bookingId, uint256 bookingAmount) external payable"
 ];
 
 const bookingContract = new ethers.Contract(bookingContractAddress, bookingContractAbi, wallet);
@@ -33,7 +35,13 @@ app.post("/api/bookings", async (req: Request, res: Response) => {
     try {
         const { userId, authorizedProviderCode, resourceId, bookingAmount } = req.body;
 
-        const txHash = await bookingManager.createBooking(userId, authorizedProviderCode, resourceId, bookingAmount);
+        const bookingRecord = new BookingRecord()
+        bookingRecord.userId = userId;
+        bookingRecord.authorizedProviderCode = authorizedProviderCode;
+        bookingRecord.resourceId = resourceId;
+        bookingRecord.bookingAmount = bookingAmount;
+        bookingRecord.bookingId = uuidv4();
+        const txHash = await bookingManager.createBooking(bookingRecord);
         if (!txHash) {
             console.error("Failed to create booking");
             res.status(500).json({ error: "Failed to create booking" });

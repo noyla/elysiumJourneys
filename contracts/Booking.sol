@@ -20,7 +20,7 @@ contract BookingContract is ProviderRegistry {
     }
 
     struct Booking {
-        uint256 id;
+        bytes16 id;
         string userId;
         string providerCode;
         string resourceId;
@@ -31,14 +31,14 @@ contract BookingContract is ProviderRegistry {
         uint256 updatedAt;
     }
 
-    uint256 private bookingCounter = 0;
-    mapping(uint256 => Booking) public bookings;
+    // uint256 private bookingCounter = 0;
+    mapping(bytes16 => Booking) public bookings;
 
-    event BookingCreated(uint256 indexed id, string indexed userId, 
+    event BookingCreated(bytes16 indexed id, string indexed userId, 
                          string indexed resourceId, uint256 amount, bytes bookingData);
-    event BookingCancelled(uint256 indexed id, string indexed userId, address userAddress);
-    event BookingDisputed(uint256 indexed id, string indexed user, string indexed resourceId);
-    event BookingResolved(uint256 indexed id, address indexed resolver);
+    event BookingCancelled(bytes16 indexed id, string indexed userId, address userAddress);
+    event BookingDisputed(bytes16 indexed id, string indexed user, string indexed resourceId);
+    event BookingResolved(bytes16 indexed id, address indexed resolver);
 
     // modifier onlyUser(uint256 bookingId) {
     //     require(bookings[bookingId].userId == msg.sender, "Not the user");
@@ -50,21 +50,17 @@ contract BookingContract is ProviderRegistry {
 
     // Create a new booking
     function createBooking(string memory userId, string memory providerCode, 
-                           string memory resourceId, bytes memory additionalData) 
-        external payable onlyOwner() onlyApprovedProvider(providerCode) returns (uint256) {
-        console.log("###### Provider to create booking: ", providerCode);
-        console.log("###### Approved provider? ", approvedProviders[providerCode]);
+                           string memory resourceId, bytes16 bookingId, bytes memory additionalData) 
+        external payable onlyOwner() onlyApprovedProvider(providerCode) {
         
         // Used when user sends funds, web3 flow
         // require(msg.value > 0, "Amount must be greater than zero");
 
         (uint256 bookingAmount) = abi.decode(additionalData, (uint256));
-        // console.log("###### Additional data: ", additionalInfo);
         console.log("###### Booking amount: ", bookingAmount);
 
-        bookingCounter++;
-        bookings[bookingCounter] = Booking({
-            id: bookingCounter,
+        bookings[bookingId] = Booking({
+            id: bookingId,
             userId: userId,
             providerCode: providerCode,
             resourceId: resourceId,
@@ -76,14 +72,12 @@ contract BookingContract is ProviderRegistry {
             updatedAt: block.timestamp
         });
 
-        console.log("###### Booking created: ", bookingCounter);
-        emit BookingCreated(bookingCounter, userId, resourceId, bookingAmount /*msg.value*/, additionalData);
-        
-        return bookingCounter;
+        string memory bookingIdAsString = string(abi.encodePacked(bookingId));
+        emit BookingCreated(bookingId, userId, resourceId, bookingAmount /*msg.value*/, additionalData);        
     }
 
     // Cancel a booking by user
-    function cancelBooking(uint256 bookingId) external {
+    function cancelBooking(bytes16 bookingId) external {
         Booking storage booking = bookings[bookingId];
         require(booking.status == BookingStatus.Pending, "Cannot cancel this booking");
 
@@ -101,7 +95,7 @@ contract BookingContract is ProviderRegistry {
     }
 
     // Dispute a booking
-    function disputeBooking(uint256 bookingId) external {
+    function disputeBooking(bytes16 bookingId) external {
         Booking storage booking = bookings[bookingId];
         // require(
         //     msg.sender == booking.userId /* || msg.sender == booking.provider*/,
@@ -117,7 +111,7 @@ contract BookingContract is ProviderRegistry {
     }
 
     // Resolve a dispute (by owner or mediator)
-    function resolveDispute(uint256 bookingId, address winner) external onlyOwner {
+    function resolveDispute(bytes16 bookingId, address winner) external onlyOwner {
         Booking storage booking = bookings[bookingId];
         require(booking.status == BookingStatus.Disputed, "No active dispute for this booking");
 
